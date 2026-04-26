@@ -2,22 +2,26 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db, AsyncSessionLocal
-from app.models.search_history import SearchHistory
-from app.models.place_result import PlaceResult
+from app.database import AsyncSessionLocal, get_db
 from app.models.extracted_clues import ExtractedClues
+from app.models.place_result import PlaceResult
+from app.models.search_history import SearchHistory
 from app.schemas.analyze import (
     AnalyzeLinkRequest,
     AnalyzeLinkResponse,
-    SearchResultsResponse,
     PlaceResultOut,
+    SearchResultsResponse,
 )
-from app.services.url_parser import parse_url, UnsupportedURLError
-from app.services.analyzer import run_analysis, confidence_level
+from app.schemas.llm import LLMExtraction
+from app.services.analyzer import confidence_level, run_analysis
+from app.services.explanation import build_explanation
+from app.services.places_search import PlaceCandidate as GPCandidate
+from app.services.ranking_engine import RankedResult
+from app.services.url_parser import UnsupportedURLError, parse_url
 
 router = APIRouter(tags=["analyze"])
 
@@ -28,7 +32,6 @@ async def analyze_link(
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    # Pre-validate URL before creating a DB row
     try:
         parsed = parse_url(str(payload.url))
     except UnsupportedURLError as e:
@@ -45,18 +48,13 @@ async def analyze_link(
     await db.commit()
     await db.refresh(row)
 
-    # Kick off pipeline in background. In Phase 4 this becomes a Celery task.
     background.add_task(
-        _run_in_new_session,
-        row.id,
-        str(payload.url),
-        payload.user_hint_city,
+        _run_in_new_session, row.id, str(payload.url), payload.user_hint_city
     )
     return AnalyzeLinkResponse(search_id=row.id, status=row.status)
 
 
 async def _run_in_new_session(search_id: UUID, url: str, hint_city: str | None):
-    """Background tasks run after response is sent — they need a fresh session."""
     async with AsyncSessionLocal() as session:
         await run_analysis(session, search_id, url, hint_city)
 
@@ -87,15 +85,23 @@ async def get_results(search_id: UUID, db: AsyncSession = Depends(get_db)):
         )
     ).scalar_one_or_none()
 
-    llm_out = (clues.llm_output if clues else {}) or {}
-    needs_input = llm_out.get("needs_user_input", False)
-    question = llm_out.get("suggested_user_question")
+    llm_out_dict = (clues.llm_output if clues else {}) or {}
+    needs_input = llm_out_dict.get("needs_user_input", False)
+    question = llm_out_dict.get("suggested_user_question")
 
     if not results:
+        # Rebuild explanation for the empty case
+        try:
+            extraction = LLMExtraction.model_validate(llm_out_dict) if llm_out_dict else LLMExtraction()
+        except Exception:
+            extraction = LLMExtraction()
+        explanation = build_explanation(extraction, [], "none")
+
         return SearchResultsResponse(
             search_id=search_id,
             status="completed",
             confidence_level="none",
+            explanation=explanation,
             needs_user_input=True,
             suggested_user_question=question
             or "I couldn't find this place. Could you share the cafe name or city?",
@@ -105,10 +111,35 @@ async def get_results(search_id: UUID, db: AsyncSession = Depends(get_db)):
     top_confidence = results[0].confidence_score
     level = confidence_level(top_confidence)
 
+    # Reconstruct ranked results to feed the explanation builder
+    try:
+        extraction = LLMExtraction.model_validate(llm_out_dict) if llm_out_dict else LLMExtraction()
+    except Exception:
+        extraction = LLMExtraction()
+    ranked_for_explanation = [
+        RankedResult(
+            rank=r.rank,
+            place=GPCandidate(
+                google_place_id=r.google_place_id,
+                name=r.place_name,
+                address=r.address,
+                latitude=r.latitude,
+                longitude=r.longitude,
+                rating=r.rating,
+                review_count=r.review_count,
+            ),
+            confidence=r.confidence_score,
+            reason=r.reason or [],
+        )
+        for r in results
+    ]
+    explanation = build_explanation(extraction, ranked_for_explanation, level)
+
     return SearchResultsResponse(
         search_id=search_id,
         status="completed",
         confidence_level=level,
+        explanation=explanation,
         needs_user_input=needs_input,
         suggested_user_question=question,
         results=[
@@ -123,6 +154,7 @@ async def get_results(search_id: UUID, db: AsyncSession = Depends(get_db)):
                 maps_url=r.maps_url,
                 confidence=r.confidence_score,
                 reason=r.reason or [],
+                google_place_id=r.google_place_id,
             )
             for r in results
         ],

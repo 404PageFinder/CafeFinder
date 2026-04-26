@@ -3,16 +3,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import settings
-from app.database import engine, Base
-from app.routers import analyze, health
+from app.database import Base, engine
+from app.routers import analyze, feedback, health
 
 # Import models so SQLAlchemy registers them on Base.metadata
-from app.models import search_history, extracted_clues, place_result  # noqa: F401
+from app.models import (  # noqa: F401
+    extracted_clues,
+    feedback as feedback_model,
+    place_result,
+    search_history,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # MVP-only: auto-create tables. Use Alembic migrations in production.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -22,3 +26,4 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(analyze.router)
+app.include_router(feedback.router)

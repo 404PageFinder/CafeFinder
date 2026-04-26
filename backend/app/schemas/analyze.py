@@ -26,12 +26,14 @@ class PlaceResultOut(BaseModel):
     maps_url: str | None
     confidence: float
     reason: list[str]
+    google_place_id: str | None = None
 
 
 class SearchResultsResponse(BaseModel):
     search_id: UUID
     status: str
     confidence_level: Literal["high", "medium", "low", "none"] | None = None
+    explanation: str | None = None  # NEW in 1.5 — human-readable summary
     needs_user_input: bool = False
     suggested_user_question: str | None = None
     results: list[PlaceResultOut] = Field(default_factory=list)

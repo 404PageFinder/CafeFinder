@@ -1,0 +1,129 @@
+{
+  "version": "1.0",
+  "description": "CafeFinder Phase 1.5 evaluation dataset. Each test case is a YouTube link with the ground-truth cafe/restaurant the link refers to. Used by evaluation/run_eval.py to compute Top-1 / Top-3 accuracy and confidence-calibration metrics.",
+  "match_strategy": {
+    "primary": "google_place_id (exact match)",
+    "fallback": "place_name fuzzy match >= 0.85 AND city present in actual address"
+  },
+  "instructions": [
+    "Replace each URL placeholder with a real YouTube/Shorts link that clearly shows ONE cafe or restaurant.",
+    "Fill in expected.google_place_id by searching the cafe on Google Maps and copying the place ID from the share link or via the Places API. This is the gold-standard match key.",
+    "If you don't have place_id, leave it null; the matcher will fall back to name+city.",
+    "Aim for 50 cases. Mix difficulty levels: easy (chain with name in title), medium (name in description only), hard (no name, only visual clues).",
+    "Tag each case with attributes for slicing metrics: chain, indie, hidden_name, hindi_speech, ocr_required, etc."
+  ],
+  "test_cases": [
+    {
+      "id": "tc_001",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_001",
+      "expected": {
+        "place_name": "Roastery Coffee House",
+        "google_place_id": null,
+        "city": "Hyderabad",
+        "area": "Banjara Hills",
+        "country": "India"
+      },
+      "tags": ["indie", "name_in_title", "hyderabad"],
+      "difficulty": "easy",
+      "notes": "Cafe name appears clearly in video title and signage."
+    },
+    {
+      "id": "tc_002",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_002",
+      "expected": {
+        "place_name": "Conçu",
+        "google_place_id": null,
+        "city": "Hyderabad",
+        "area": "Jubilee Hills",
+        "country": "India"
+      },
+      "tags": ["indie", "name_in_caption", "hyderabad", "patisserie"],
+      "difficulty": "easy",
+      "notes": "Patisserie chain with multiple branches — branch disambiguation test."
+    },
+    {
+      "id": "tc_003",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_003",
+      "expected": {
+        "place_name": "Third Wave Coffee",
+        "google_place_id": null,
+        "city": "Bengaluru",
+        "area": "Indiranagar",
+        "country": "India"
+      },
+      "tags": ["chain", "branch_disambiguation", "bengaluru"],
+      "difficulty": "medium",
+      "notes": "Chain test — Third Wave has many branches. Tests area-aware ranking."
+    },
+    {
+      "id": "tc_004",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_004",
+      "expected": {
+        "place_name": "Starbucks",
+        "google_place_id": null,
+        "city": "Mumbai",
+        "area": "Bandra",
+        "country": "India"
+      },
+      "tags": ["chain", "global_brand", "mumbai"],
+      "difficulty": "medium",
+      "notes": "Global chain — must pick the right branch."
+    },
+    {
+      "id": "tc_005",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_005",
+      "expected": {
+        "place_name": "Paradise Biryani",
+        "google_place_id": null,
+        "city": "Hyderabad",
+        "area": "Secunderabad",
+        "country": "India"
+      },
+      "tags": ["restaurant", "chain", "hyderabad", "biryani"],
+      "difficulty": "medium",
+      "notes": "Hyderabad chain — many branches, test area disambiguation."
+    },
+    {
+      "id": "tc_006",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_006",
+      "expected": {
+        "place_name": "Café Niloufer",
+        "google_place_id": null,
+        "city": "Hyderabad",
+        "area": "Lakdikapul",
+        "country": "India"
+      },
+      "tags": ["indie", "iconic", "hyderabad", "irani_cafe"],
+      "difficulty": "easy",
+      "notes": "Iconic Hyderabad Irani cafe — name should be unambiguous."
+    },
+    {
+      "id": "tc_007",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_007",
+      "expected": {
+        "place_name": "Driftwood Cafe",
+        "google_place_id": null,
+        "city": "Hyderabad",
+        "area": "Banjara Hills",
+        "country": "India"
+      },
+      "tags": ["indie", "no_clear_name_in_title", "hyderabad"],
+      "difficulty": "hard",
+      "notes": "Name not in title — must come from description or hashtags."
+    },
+    {
+      "id": "tc_008",
+      "url": "https://www.youtube.com/shorts/REPLACE_ME_008",
+      "expected": {
+        "place_name": null,
+        "google_place_id": null,
+        "city": "Hyderabad",
+        "area": null,
+        "country": "India"
+      },
+      "tags": ["low_signal", "should_fail_gracefully"],
+      "difficulty": "very_hard",
+      "notes": "Negative test — video has no clear cafe name. Should return low confidence and ask for screenshot."
+    }
+  ]
+}
