@@ -250,3 +250,71 @@ Workflow for any tuning: baseline run → change → re-run → compare. The eva
 ## License
 
 MIT
+
+---
+
+## Phase 2 — Screenshot Upload Support
+
+### What's new
+
+- `POST /upload-screenshot` endpoint accepting multipart image uploads
+- PaddleOCR backend behind a swappable interface (`app/services/ocr.py`)
+- Temp-file storage with guaranteed cleanup (`app/services/storage.py`)
+- Unified `search_id` flow: screenshot uploads share the same history,
+  results, feedback, and explanation endpoints as YouTube links
+- New `input_type` column on `SearchHistory` distinguishes the two paths
+- New OCR fields on `ExtractedClues`: `ocr_text`, `ocr_full_text`,
+  `ocr_confidence`, `ocr_backend`
+
+### Privacy
+
+Uploaded screenshots are NEVER persisted. They live in `/tmp` for the
+duration of the OCR call (typically 1–3 seconds), then are deleted.
+Only the OCR text and downstream extracted clues persist.
+
+### Install Phase 2 dependencies
+
+PaddleOCR is heavy (~300MB of model files on first use). If you're not
+ready for that, you can run all unit tests without it — only the
+screenshot pipeline needs it at runtime.
+
+```bash
+pip install -r requirements.txt
+```
+
+### Generate test fixtures
+
+```bash
+python -m tests.fixtures.generate_screenshots
+```
+
+This creates 4 synthetic screenshots in `tests/fixtures/screenshots/`.
+
+### Try the endpoint
+
+```bash
+curl -X POST http://localhost:8000/upload-screenshot \
+  -F "image=@tests/fixtures/screenshots/signboard_roastery.png" \
+  -F "user_id=test_user" \
+  -F "user_hint_city=Hyderabad"
+```
+
+Response:
+
+```json
+{ "search_id": "abc-123-...", "status": "pending" }
+```
+
+Then poll `/search/{search_id}/results` exactly like the YouTube flow.
+
+### DB migration
+
+Fresh installs auto-migrate via `Base.metadata.create_all` on startup.
+For existing v1.5 data, run `migrations/phase_2_upgrade.sql` manually.
+
+### What's not in Phase 2
+
+- Real-image OCR test suite (requires network and GPU for fast iteration)
+- Google Vision fallback for low-confidence cases (designed but not wired)
+- S3 / cloud storage (local /tmp only)
+- Image preprocessing (deskew, denoise) — PaddleOCR handles most cases

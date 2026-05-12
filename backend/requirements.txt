@@ -12,3 +12,13 @@ python-dotenv==1.0.1
 rapidfuzz==3.10.0
 pytest==8.3.3
 pytest-asyncio==0.24.0
+
+# Phase 2 — OCR
+# Note: paddlepaddle is large (~300MB) and CPU-only by default.
+# For GPU, swap to paddlepaddle-gpu and adjust the Dockerfile.
+paddleocr==2.8.1
+paddlepaddle==2.6.2
+Pillow==10.4.0          # used by tests to generate fixture images and by PaddleOCR
+
+# Used by upload tests to send multipart form data without a running server
+# (already pulled in transitively by httpx but pinned here for clarity)
